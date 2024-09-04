@@ -117,7 +117,7 @@ Contributions are welcome! Feel free to open an issue or submit a pull request.
 
 ## Author
 
-[Imrul](https://github.com/yourusername)
+[Imrul](https://imrul.net)
 
 ## Contact
 
