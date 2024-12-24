@@ -1,0 +1,158 @@
+apiVersion: v1
+data:
+  AIRFLOW__CORE__EXECUTOR: LocalExecutor
+  AIRFLOW__CORE__FERNET_KEY: your_fernet_key_here
+  AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+  AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+kind: ConfigMap
+metadata:
+  name: airflow-config
+  namespace: airflow
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow
+  namespace: airflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow
+  template:
+    metadata:
+      labels:
+        app: airflow
+    spec:
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: airflow-config
+        image: apache/airflow:2.4.1
+        name: airflow
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - mountPath: /opt/airflow/dags
+          name: airflow-dags
+        - mountPath: /opt/airflow/logs
+          name: airflow-logs
+      volumes:
+      - name: airflow-dags
+        persistentVolumeClaim:
+          claimName: airflow-pvc
+      - name: airflow-logs
+        persistentVolumeClaim:
+          claimName: airflow-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow
+  namespace: airflow
+spec:
+  ports:
+  - port: 8080
+  selector:
+    app: airflow
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-scheduler
+  namespace: airflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-scheduler
+  template:
+    metadata:
+      labels:
+        app: airflow-scheduler
+    spec:
+      containers:
+      - command:
+        - airflow
+        - scheduler
+        envFrom:
+        - configMapRef:
+            name: airflow-config
+        image: apache/airflow:2.4.1
+        name: airflow-scheduler
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: airflow
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: airflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_DB
+          value: airflow
+        - name: POSTGRES_USER
+          value: airflow
+        - name: POSTGRES_PASSWORD
+          value: airflow
+        image: postgres:13
+        name: postgres
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgres-storage
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: airflow-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: airflow
+spec:
+  ports:
+  - port: 5432
+  selector:
+    app: postgres
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: airflow-pv
+  namespace: airflow
+spec:
+  accessModes:
+  - ReadWriteOnce
+  capacity:
+    storage: 10Gi
+  hostPath:
+    path: /mnt/data/airflow
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-pvc
+  namespace: airflow
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
